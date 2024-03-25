@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OHM Prod-Stag tiler</title>
+    <link
+      href="https://api.mapbox.com/mapbox-gl-js/v2.3.1/mapbox-gl.css"
+      rel="stylesheet"
+    />
+    <script src="https://api.mapbox.com/mapbox-gl-js/v2.3.1/mapbox-gl.js"></script>
+    <script src="app.js"></script>
+    <style>
+      body {
+        margin: 0;
+      }
+      #navbar {
+        position: absolute;
+        width: 100%;
+        height: 40px;
+        top: 0;
+        z-index: 222;
+        display: flex;
+        align-items: center;
+        background-color: #000;
+        color: white;
+      }
+
+      #navbar > div {
+        flex: 1;
+        text-align: center;
+      }
+
+      #navbar > div:first-child {
+        text-align: left;
+        margin-left: 10%;
+      }
+
+      #navbar > div:last-child {
+        text-align: right;
+        margin-right: 10%;
+      }
+      #map {
+        position: fixed;
+        top: 0px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 20000;
+        height: 150px;
+        width: 150px;
+      }
+      #iframeContainer {
+        display: flex;
+        flex-direction: row;
+        height: 100vh;
+        width: 100%;
+      }
+      iframe {
+        flex-grow: 1;
+        width: 100%;
+        height: 100vh;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="navbar"
+      style="display: flex; justify-content: space-between; width: 100%"
+    >
+      <div>
+        <a id="href_prod" href="#" target="_blank"
+        style="color: #2776CA; text-decoration: none;" ><h5 id="title_prod">Tiler Production</h5></a
+        >
+      </div>
+      <div>
+        <a id="href_staging" href="#" target="_blank"
+        style="color: #2776CA; text-decoration: none;" ><h5 id="title_staging">Tiler Staging</h5></a
+        >
+      </div>
+    </div>
+
+    <div id="iframeContainer">
+      <iframe
+        id="vtile_prod"
+        src="https://vtiles.openhistoricalmap.org"
+      ></iframe>
+      <iframe id="vtile_staging" src="https://vtiles-staging.openhistoricalmap.org"></iframe>
+    </div>
+    <div id="map"></div>
+    <script>
+      mapboxgl.accessToken =
+        "pk.eyJ1IjoicnViZW4iLCJhIjoiY2xubDNiaHFwMXZjaDJtcmk3eW44NXJkaiJ9.vG8Vmq6bgcmiKKtmuV_fjw";
+      var map = new mapboxgl.Map({
+        container: "map",
+        style: "mapbox://styles/mapbox/streets-v11",
+        center: [0, 0],
+        zoom: 2,
+        hash: true,
+      });
+      const iframe_vtileProd = document.getElementById("vtileProd");
+      const iframe_vtileStaging = document.getElementById("vtileStaging");
+      const title_vtileProd = document.getElementById("title_prod");
+      const title_vtilesStaging = document.getElementById("title_staging");
+
+      function frameUpdate(enviroment, zoom, x, y) {
+        const iframe = document.getElementById("vtile_" + enviroment);
+        const title = document.getElementById("title_" + enviroment);
+        const aTag = document.getElementById("href_" + enviroment);
+        const url = iframe.src.split("#")[0];
+        const newUrl =
+          url + "#" + zoom.toFixed(2) + "/" + x.toFixed(2) + "/" + y.toFixed(2);
+        iframe.src = newUrl;
+        title.textContent = newUrl;
+        aTag.href = newUrl;
+      }
+      map.on("moveend", function () {
+        const center = map.getCenter();
+        frameUpdate("prod", map.getZoom(), center.lat, center.lng);
+        frameUpdate("staging", map.getZoom(), center.lat, center.lng);
+      });
+
+      map.on("load", function () {
+        const params = getMapParametersFromCurrentUrl();
+        if (params) {
+          frameUpdate("prod", params.zoom, params.x, params.y);
+          frameUpdate("staging", params.zoom, params.x, params.y);
+        }
+      });
+    </script>
+  </body>
+</html>
