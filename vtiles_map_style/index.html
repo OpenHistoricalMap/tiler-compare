@@ -14,7 +14,6 @@
       rel="stylesheet"
     />
     <script src="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.js"></script>
-
     <script>
       window.mapboxgl = maplibregl;
     </script>
@@ -52,44 +51,221 @@
       .compare-swiper {
         z-index: 999 !important;
       }
+
+      #style-left,
+      #style-right {
+        position: absolute;
+        top: 10px;
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        padding: 10px;
+        border-radius: 6px;
+        z-index: 1000;
+        font-family: sans-serif;
+      }
+
+      #style-left {
+        left: 10px;
+      }
+
+      #style-right {
+        right: 10px;
+      }
+
+      #style-left label,
+      #style-right label {
+        font-size: 13px;
+      }
+
+      #style-left select,
+      #style-right select {
+        width: 200px;
+        margin-bottom: 10px;
+      }
+
+      #tooltip-toggle {
+        margin-top: 5px;
+      }
     </style>
   </head>
   <body>
-    <div id="comparison-container">
-      <div id="before" class="map"></div>
-      <div id="after" class="map"></div>
+    <!-- Dropdowns and toggle -->
+    <!-- Style Selector -->
+    <div id="style-left">
+      <label for="prodSelect">Production Style:</label><br />
+      <select id="prodSelect">
+        <option value="map_style">Map Style (Remote)</option>
+        <option value="vtiles_style">Vector Tiles (Local)</option></select
+      ><br /><br />
+      <label
+        ><input type="checkbox" id="tooltip-toggle" checked /> Enable
+        Tooltips</label
+      >
     </div>
 
+    <div id="style-right">
+      <label for="stagingSelect">Staging Style:</label><br />
+      <select id="stagingSelect">
+        <option value="map_style">Map Style (Remote)</option>
+        <option value="vtiles_style">Vector Tiles (Local)</option>
+      </select>
+    </div>
+
+    <!-- Map comparison -->
+    <div id="comparison-container"></div>
+
     <script>
-      const styleProd =
-        "https://www.openhistoricalmap.org/map-styles/historical/historical.json";
-      // const styleStaging = 'https://www.staging.openhistoricalmap.org/map-styles/historical/historical.json';
+      const production_options = {
+        map_style:
+          "https://www.openhistoricalmap.org/map-styles/historical/historical.json",
+        vtiles_style: "./../map-styles/production.json",
+      };
 
-      const styleStaging = './../map-styles/production.json';
-      // const styleStaging = "./../map-styles/staging.json";
+      const staging_options = {
+        map_style:
+          "https://www.staging.openhistoricalmap.org/map-styles/historical/historical.json",
+        vtiles_style: "./../map-styles/staging.json",
+      };
 
-      const centerCoords = [8.524, 49.9521]; // Ejemplo: área de Taunus-Eisenbahn
+      let beforeMap, afterMap, compareControl;
 
-      const beforeMap = new maplibregl.Map({
-        container: "before",
-        style: styleProd,
-        center: centerCoords,
-        zoom: 10,
-        hash: true,
-      });
+      function getURLParams() {
+        const params = new URLSearchParams(window.location.search);
+        return {
+          prod: params.get("prod") || "map_style",
+          staging: params.get("staging") || "vtiles_style",
+        };
+      }
 
-      const afterMap = new maplibregl.Map({
-        container: "after",
-        style: styleStaging,
-        center: centerCoords,
-        zoom: 10,
-        hash: true,
-      });
+      function setURLParams(prod, staging) {
+        const params = new URLSearchParams({ prod, staging });
+        window.history.replaceState(
+          {},
+          "",
+          `${location.pathname}?${params}${location.hash}`
+        );
+      }
 
-      beforeMap.on("load", () => {
-        afterMap.on("load", () => {
-          new mapboxgl.Compare(beforeMap, afterMap, "#comparison-container");
+      function getCenterZoomFromHash() {
+        const hash = window.location.hash;
+        let zoom = 10,
+          lat = 49.9521,
+          lng = 8.524;
+        const match = hash.match(/#(\d+\.?\d*)\/([-\d.]+)\/([-\d.]+)/);
+        if (match) {
+          zoom = parseFloat(match[1]);
+          lat = parseFloat(match[2]);
+          lng = parseFloat(match[3]);
+        }
+        return { center: [lng, lat], zoom };
+      }
+
+      function enableHoverPopup(map, id, tooltipEnabled) {
+        const popup = new maplibregl.Popup({
+          closeButton: false,
+          closeOnClick: false,
         });
+
+        map.on("mousemove", (e) => {
+          if (!tooltipEnabled()) return popup.remove();
+
+          const layerIds = map
+            .getStyle()
+            .layers.filter((l) =>
+              ["fill", "line", "circle", "symbol"].includes(l.type)
+            )
+            .map((l) => l.id);
+
+          const features = map.queryRenderedFeatures(e.point, {
+            layers: layerIds,
+          });
+          if (!features.length) return popup.remove();
+
+          const props = Object.entries(features[0].properties || {})
+            .map(([key, val]) => `<strong>${key}</strong>: ${val}`)
+            .join("<br>");
+
+          popup
+            .setLngLat(e.lngLat)
+            .setHTML(
+              `<div style="max-height: 200px; overflow-y: auto;">${props}</div>`
+            )
+            .addTo(map);
+        });
+
+        map.on("mouseleave", () => popup.remove());
+      }
+
+      function createMaps(prodKey, stagingKey) {
+        const container = document.getElementById("comparison-container");
+        container.innerHTML = `
+        <div id="before" class="map"></div>
+        <div id="after" class="map"></div>
+      `;
+
+        if (compareControl && compareControl.swipe) {
+          compareControl.swipe.remove();
+        }
+
+        const { center, zoom } = getCenterZoomFromHash();
+        const tooltipEnabled = () =>
+          document.getElementById("tooltip-toggle").checked;
+
+        beforeMap = new maplibregl.Map({
+          container: "before",
+          style: production_options[prodKey],
+          center,
+          zoom,
+          hash: true,
+        });
+
+        afterMap = new maplibregl.Map({
+          container: "after",
+          style: staging_options[stagingKey],
+          center,
+          zoom,
+          hash: true,
+        });
+
+        beforeMap.on("load", () => {
+          enableHoverPopup(beforeMap, "before", tooltipEnabled);
+        });
+
+        afterMap.on("load", () => {
+          enableHoverPopup(afterMap, "after", tooltipEnabled);
+          compareControl = new mapboxgl.Compare(
+            beforeMap,
+            afterMap,
+            "#comparison-container"
+          );
+        });
+      }
+
+      document.addEventListener("DOMContentLoaded", () => {
+        const prodSelect = document.getElementById("prodSelect");
+        const stagingSelect = document.getElementById("stagingSelect");
+
+        const params = getURLParams();
+        prodSelect.value = params.prod;
+        stagingSelect.value = params.staging;
+
+        createMaps(params.prod, params.staging);
+
+        prodSelect.addEventListener("change", () => {
+          setURLParams(prodSelect.value, stagingSelect.value);
+          createMaps(prodSelect.value, stagingSelect.value);
+        });
+
+        stagingSelect.addEventListener("change", () => {
+          setURLParams(prodSelect.value, stagingSelect.value);
+          createMaps(prodSelect.value, stagingSelect.value);
+        });
+
+        document
+          .getElementById("tooltip-toggle")
+          .addEventListener("change", () => {
+            createMaps(prodSelect.value, stagingSelect.value);
+          });
       });
     </script>
   </body>
