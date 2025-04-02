@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Swipe between OpenHistoricalMap Styles</title>
+    <meta
+      name="viewport"
+      content="initial-scale=1,maximum-scale=1,user-scalable=no"
+    />
+
+    <!-- MapLibre GL -->
+    <link
+      href="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.css"
+      rel="stylesheet"
+    />
+    <script src="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.js"></script>
+
+    <script>
+      window.mapboxgl = maplibregl;
+    </script>
+
+    <!-- Mapbox GL Compare plugin -->
+    <link
+      href="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-compare/v0.4.0/mapbox-gl-compare.css"
+      rel="stylesheet"
+    />
+    <script src="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-compare/v0.4.0/mapbox-gl-compare.js"></script>
+
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        overflow: hidden;
+      }
+
+      #comparison-container {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 100%;
+      }
+
+      .map {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 100%;
+      }
+
+      .compare-swiper {
+        z-index: 999 !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="comparison-container">
+      <div id="before" class="map"></div>
+      <div id="after" class="map"></div>
+    </div>
+
+    <script>
+      const styleProd =
+        "https://www.openhistoricalmap.org/map-styles/historical/historical.json";
+      // const styleStaging = 'https://www.staging.openhistoricalmap.org/map-styles/historical/historical.json';
+
+      // const styleProd = 'map-styles/production.json';
+      const styleStaging = "./../map-styles/staging.json";
+
+      const centerCoords = [8.524, 49.9521]; // Ejemplo: área de Taunus-Eisenbahn
+
+      const beforeMap = new maplibregl.Map({
+        container: "before",
+        style: styleProd,
+        center: centerCoords,
+        zoom: 10,
+        hash: true,
+      });
+
+      const afterMap = new maplibregl.Map({
+        container: "after",
+        style: styleStaging,
+        center: centerCoords,
+        zoom: 10,
+        hash: true,
+      });
+
+      beforeMap.on("load", () => {
+        afterMap.on("load", () => {
+          new mapboxgl.Compare(beforeMap, afterMap, "#comparison-container");
+        });
+      });
+    </script>
+  </body>
+</html>

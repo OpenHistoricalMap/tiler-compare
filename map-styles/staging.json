@@ -1,0 +1,347 @@
+{
+  "version": 8,
+  "name": "tegola-style",
+  "sources": {
+    "tegola": {
+      "type": "vector",
+      "tiles": [
+        "https://vtiles.staging.openhistoricalmap.org/maps/osm/{z}/{x}/{y}.pbf"
+      ],
+      "minzoom": 0,
+      "maxzoom": 20
+    }
+  },
+  "layers": [
+    {
+      "id": "background",
+      "type": "background",
+      "paint": {
+        "background-color": "#000000"
+      }
+    },
+    {
+      "id": "land_ohm_lines",
+      "type": "line",
+      "source": "tegola",
+      "source-layer": "land_ohm_lines",
+      "minzoom": 0,
+      "maxzoom": 20,
+      "paint": {
+        "line-color": "#8fffb2",
+        "line-width": 1
+      }
+    },
+    {
+      "id": "land_ohm_centroids",
+      "type": "circle",
+      "source": "tegola",
+      "source-layer": "land_ohm_centroids",
+      "minzoom": 0,
+      "maxzoom": 20,
+      "paint": {
+        "circle-color": "#b200ff",
+        "circle-radius": 3
+      }
+    },
+    {
+      "id": "land_ohm_maritime",
+      "type": "line",
+      "source": "tegola",
+      "source-layer": "land_ohm_maritime",
+      "minzoom": 0,
+      "maxzoom": 12,
+      "paint": {
+        "line-color": "#5996ff",
+        "line-width": 1
+      }
+    },
+    {
+      "id": "place_areas",
+      "type": "fill",
+      "source": "tegola",
+      "source-layer": "place_areas",
+      "minzoom": 0,
+      "maxzoom": 20,
+      "paint": {
+        "fill-color": "#2b47c4",
+        "fill-opacity": 0.4
+      }
+    },
+    {
+      "id": "place_points",
+      "type": "circle",
+      "source": "tegola",
+      "source-layer": "place_points",
+      "minzoom": 0,
+      "maxzoom": 20,
+      "paint": {
+        "circle-color": "#b2ff9e",
+        "circle-radius": 3
+      }
+    },
+    {
+      "id": "water_areas",
+      "type": "fill",
+      "source": "tegola",
+      "source-layer": "water_areas",
+      "minzoom": 0,
+      "maxzoom": 20,
+      "paint": {
+        "fill-color": "#c7ff90",
+        "fill-opacity": 0.4
+      }
+    },
+    {
+      "id": "water_areas_centroids",
+      "type": "circle",
+      "source": "tegola",
+      "source-layer": "water_areas_centroids",
+      "minzoom": 0,
+      "maxzoom": 20,
+      "paint": {
+        "circle-color": "#3c6cae",
+        "circle-radius": 3
+      }
+    },
+    {
+      "id": "water_lines",
+      "type": "line",
+      "source": "tegola",
+      "source-layer": "water_lines",
+      "minzoom": 0,
+      "maxzoom": 20,
+      "paint": {
+        "line-color": "#f459f4",
+        "line-width": 1
+      }
+    },
+    {
+      "id": "transport_areas",
+      "type": "fill",
+      "source": "tegola",
+      "source-layer": "transport_areas",
+      "minzoom": 0,
+      "maxzoom": 20,
+      "paint": {
+        "fill-color": "#e4c9ff",
+        "fill-opacity": 0.4
+      }
+    },
+    {
+      "id": "transport_associated_streets",
+      "type": "line",
+      "source": "tegola",
+      "source-layer": "transport_associated_streets",
+      "minzoom": 0,
+      "maxzoom": 20,
+      "paint": {
+        "line-color": "#a44de0",
+        "line-width": 1
+      }
+    },
+    {
+      "id": "transport_lines",
+      "type": "line",
+      "source": "tegola",
+      "source-layer": "transport_lines",
+      "minzoom": 0,
+      "maxzoom": 20,
+      "paint": {
+        "line-color": "#ccffa0",
+        "line-width": 1
+      }
+    },
+    {
+      "id": "transport_points",
+      "type": "circle",
+      "source": "tegola",
+      "source-layer": "transport_points",
+      "minzoom": 0,
+      "maxzoom": 20,
+      "paint": {
+        "circle-color": "#dbd86e",
+        "circle-radius": 3
+      }
+    },
+    {
+      "id": "route_lines",
+      "type": "line",
+      "source": "tegola",
+      "source-layer": "route_lines",
+      "minzoom": 0,
+      "maxzoom": 20,
+      "paint": {
+        "line-color": "#b8ff7f",
+        "line-width": 1
+      }
+    },
+    {
+      "id": "amenity_areas",
+      "type": "fill",
+      "source": "tegola",
+      "source-layer": "amenity_areas",
+      "minzoom": 0,
+      "maxzoom": 20,
+      "paint": {
+        "fill-color": "#7376e6",
+        "fill-opacity": 0.4
+      }
+    },
+    {
+      "id": "amenity_areas_centroids",
+      "type": "circle",
+      "source": "tegola",
+      "source-layer": "amenity_areas_centroids",
+      "minzoom": 0,
+      "maxzoom": 20,
+      "paint": {
+        "circle-color": "#ccb299",
+        "circle-radius": 3
+      }
+    },
+    {
+      "id": "amenity_points",
+      "type": "circle",
+      "source": "tegola",
+      "source-layer": "amenity_points",
+      "minzoom": 0,
+      "maxzoom": 20,
+      "paint": {
+        "circle-color": "#6fb8ff",
+        "circle-radius": 3
+      }
+    },
+    {
+      "id": "buildings",
+      "type": "fill",
+      "source": "tegola",
+      "source-layer": "buildings",
+      "minzoom": 0,
+      "maxzoom": 20,
+      "paint": {
+        "fill-color": "#393e91",
+        "fill-opacity": 0.4
+      }
+    },
+    {
+      "id": "buildings_centroids",
+      "type": "circle",
+      "source": "tegola",
+      "source-layer": "buildings_centroids",
+      "minzoom": 0,
+      "maxzoom": 20,
+      "paint": {
+        "circle-color": "#9fff6b",
+        "circle-radius": 3
+      }
+    },
+    {
+      "id": "buildings_points",
+      "type": "circle",
+      "source": "tegola",
+      "source-layer": "buildings_points",
+      "minzoom": 0,
+      "maxzoom": 20,
+      "paint": {
+        "circle-color": "#d68faa",
+        "circle-radius": 3
+      }
+    },
+    {
+      "id": "landuse_areas",
+      "type": "fill",
+      "source": "tegola",
+      "source-layer": "landuse_areas",
+      "minzoom": 0,
+      "maxzoom": 20,
+      "paint": {
+        "fill-color": "#91c29a",
+        "fill-opacity": 0.4
+      }
+    },
+    {
+      "id": "landuse_areas_centroids",
+      "type": "circle",
+      "source": "tegola",
+      "source-layer": "landuse_areas_centroids",
+      "minzoom": 0,
+      "maxzoom": 20,
+      "paint": {
+        "circle-color": "#d645d4",
+        "circle-radius": 3
+      }
+    },
+    {
+      "id": "landuse_lines",
+      "type": "line",
+      "source": "tegola",
+      "source-layer": "landuse_lines",
+      "minzoom": 0,
+      "maxzoom": 20,
+      "paint": {
+        "line-color": "#c26b2f",
+        "line-width": 1
+      }
+    },
+    {
+      "id": "landuse_points",
+      "type": "circle",
+      "source": "tegola",
+      "source-layer": "landuse_points",
+      "minzoom": 0,
+      "maxzoom": 20,
+      "paint": {
+        "circle-color": "#d450e3",
+        "circle-radius": 3
+      }
+    },
+    {
+      "id": "other_areas",
+      "type": "fill",
+      "source": "tegola",
+      "source-layer": "other_areas",
+      "minzoom": 0,
+      "maxzoom": 20,
+      "paint": {
+        "fill-color": "#8d9a4a",
+        "fill-opacity": 0.4
+      }
+    },
+    {
+      "id": "other_areas_centroids",
+      "type": "circle",
+      "source": "tegola",
+      "source-layer": "other_areas_centroids",
+      "minzoom": 0,
+      "maxzoom": 20,
+      "paint": {
+        "circle-color": "#0f08f7",
+        "circle-radius": 3
+      }
+    },
+    {
+      "id": "other_lines",
+      "type": "line",
+      "source": "tegola",
+      "source-layer": "other_lines",
+      "minzoom": 0,
+      "maxzoom": 20,
+      "paint": {
+        "line-color": "#50c2f2",
+        "line-width": 1
+      }
+    },
+    {
+      "id": "other_points",
+      "type": "circle",
+      "source": "tegola",
+      "source-layer": "other_points",
+      "minzoom": 0,
+      "maxzoom": 20,
+      "paint": {
+        "circle-color": "#d6936f",
+        "circle-radius": 3
+      }
+    }
+  ]
+}

@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Layer Toggle Map + Tile Size</title>
+    <meta
+      name="viewport"
+      content="initial-scale=1,maximum-scale=1,user-scalable=no"
+    />
+
+    <!-- MapLibre GL -->
+    <link
+      href="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.css"
+      rel="stylesheet"
+    />
+    <script src="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.js"></script>
+
+    <script>
+      window.mapboxgl = maplibregl;
+    </script>
+
+    <!-- Mapbox GL Compare plugin -->
+    <link
+      href="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-compare/v0.4.0/mapbox-gl-compare.css"
+      rel="stylesheet"
+    />
+    <script src="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-compare/v0.4.0/mapbox-gl-compare.js"></script>
+
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #000;
+      }
+      #comparison-container {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 100%;
+      }
+      .map {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 100%;
+      }
+      .compare-swiper {
+        z-index: 999 !important;
+      }
+
+      #controls {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 1000;
+        max-height: 90%;
+        overflow-y: auto;
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        padding: 10px;
+        font-family: sans-serif;
+        font-size: 14px;
+        border-radius: 4px;
+      }
+
+      #controls label {
+        display: block;
+        margin-bottom: 4px;
+      }
+
+      .map-title {
+        position: absolute;
+        top: 10px;
+        padding: 6px 12px;
+        background: rgba(0, 0, 0, 0.6);
+        color: #fff;
+        font-size: 14px;
+        font-weight: bold;
+        font-family: sans-serif;
+        z-index: 1000;
+        border-radius: 4px;
+        pointer-events: none;
+      }
+      #before-title {
+        left: 10px;
+      }
+      #after-title {
+        right: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="comparison-container">
+      <div id="before" class="map"></div>
+      <div id="after" class="map"></div>
+
+      <div id="before-title" class="map-title">Production</div>
+      <div id="after-title" class="map-title">Staging</div>
+    </div>
+
+    <div id="controls">
+      <strong>Toggle Layers</strong>
+      <div id="layerToggles"></div>
+    </div>
+
+    <script>
+      const styleProd = "./../map-styles/production.json";
+      const styleStaging = "./../map-styles/staging.json"; // same for demo
+
+      const layers = [
+        "land_ohm_lines",
+        "land_ohm_centroids",
+        "land_ohm_maritime",
+        "place_areas",
+        "place_points",
+        "water_areas",
+        "water_areas_centroids",
+        "water_lines",
+        "transport_areas",
+        "transport_associated_streets",
+        "transport_lines",
+        "transport_points",
+        "route_lines",
+        "amenity_areas",
+        "amenity_areas_centroids",
+        "amenity_points",
+        "buildings",
+        "buildings_centroids",
+        "buildings_points",
+        "landuse_areas",
+        "landuse_areas_centroids",
+        "landuse_lines",
+        "landuse_points",
+        "other_areas",
+        "other_areas_centroids",
+        "other_lines",
+        "other_points",
+      ];
+
+      const centerCoords = [0, 0];
+
+      const beforeMap = new maplibregl.Map({
+        container: "before",
+        style: styleProd,
+        center: centerCoords,
+        zoom: 0,
+        hash: true,
+      });
+
+      const afterMap = new maplibregl.Map({
+        container: "after",
+        style: styleStaging,
+        center: centerCoords,
+        zoom: 0,
+        hash: true,
+      });
+
+      function toggleLayer(map, layerId, visible) {
+        if (!map.getLayer(layerId)) return;
+        map.setLayoutProperty(
+          layerId,
+          "visibility",
+          visible ? "visible" : "none"
+        );
+      }
+
+      function setupToggles(map1, map2) {
+        const container = document.getElementById("layerToggles");
+        layers.forEach((layerId) => {
+          const label = document.createElement("label");
+          const checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          checkbox.checked = true;
+          checkbox.onchange = () => {
+            toggleLayer(map1, layerId, checkbox.checked);
+            toggleLayer(map2, layerId, checkbox.checked);
+          };
+          label.appendChild(checkbox);
+          label.appendChild(document.createTextNode(" " + layerId));
+          container.appendChild(label);
+        });
+      }
+
+      beforeMap.on("load", () => {
+        afterMap.on("load", () => {
+          setupToggles(beforeMap, afterMap);
+          new mapboxgl.Compare(beforeMap, afterMap, "#comparison-container");
+        });
+      });
+    </script>
+  </body>
+</html>
