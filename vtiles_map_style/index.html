@@ -3,57 +3,29 @@
   <head>
     <meta charset="utf-8" />
     <title>Swipe between OpenHistoricalMap Styles</title>
-    <meta
-      name="viewport"
-      content="initial-scale=1,maximum-scale=1,user-scalable=no"
-    />
+    <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
 
-    <!-- MapLibre GL -->
-    <link
-      href="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.css"
-      rel="stylesheet"
-    />
+    <link href="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.css" rel="stylesheet" />
     <script src="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.js"></script>
-    <script>
-      window.mapboxgl = maplibregl;
-    </script>
+    <script>window.mapboxgl = maplibregl;</script>
 
-    <!-- Mapbox GL Compare plugin -->
-    <link
-      href="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-compare/v0.4.0/mapbox-gl-compare.css"
-      rel="stylesheet"
-    />
+    <link href="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-compare/v0.4.0/mapbox-gl-compare.css" rel="stylesheet" />
     <script src="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-compare/v0.4.0/mapbox-gl-compare.js"></script>
 
     <style>
-      html,
-      body {
-        margin: 0;
-        padding: 0;
-        height: 100%;
-        overflow: hidden;
+      html, body {
+        margin: 0; padding: 0; height: 100%; overflow: hidden;
       }
-
       #comparison-container {
-        position: absolute;
-        top: 0;
-        bottom: 0;
-        width: 100%;
+        position: absolute; top: 0; bottom: 0; width: 100%;
       }
-
       .map {
-        position: absolute;
-        top: 0;
-        bottom: 0;
-        width: 100%;
+        position: absolute; top: 0; bottom: 0; width: 100%;
       }
-
       .compare-swiper {
         z-index: 999 !important;
       }
-
-      #style-left,
-      #style-right {
+      #style-left, #style-right {
         position: absolute;
         top: 10px;
         background: rgba(0, 0, 0, 0.7);
@@ -63,68 +35,58 @@
         z-index: 1000;
         font-family: sans-serif;
       }
-
-      #style-left {
-        left: 10px;
-      }
-
-      #style-right {
-        right: 10px;
-      }
-
-      #style-left label,
-      #style-right label {
+      #style-left { left: 10px; }
+      #style-right { right: 10px; }
+      #style-left label, #style-right label {
         font-size: 13px;
       }
-
-      #style-left select,
-      #style-right select {
+      #style-left select, #style-right select {
         width: 200px;
         margin-bottom: 10px;
       }
-
-      #tooltip-toggle {
-        margin-top: 5px;
+      #tooltip-toggle { margin-top: 5px; }
+      .link-button {
+        cursor: pointer;
+        color: #00aaff;
+        text-decoration: underline;
+        margin-top: 10px;
+      }
+      .link-button:hover {
+        color: #66ccff;
       }
     </style>
   </head>
   <body>
-    <!-- Dropdowns and toggle -->
-    <!-- Style Selector -->
     <div id="style-left">
       <label for="prodSelect">Production Style:</label><br />
       <select id="prodSelect">
         <option value="map_style">Map Style (Remote)</option>
-        <option value="vtiles_style">Vector Tiles (Local)</option></select
-      ><br /><br />
-      <label
-        ><input type="checkbox" id="tooltip-toggle" checked /> Enable
-        Tooltips</label
-      >
+        <option value="vtiles_style">Vector Tiles</option>
+      </select><br /><br />
+      <label><input type="checkbox" id="tooltip-toggle" /> Enable Tooltips</label><br />
+      <div id="prod-link" class="link-button">Open in Vtiles</div>
     </div>
 
     <div id="style-right">
       <label for="stagingSelect">Staging Style:</label><br />
       <select id="stagingSelect">
         <option value="map_style">Map Style (Remote)</option>
-        <option value="vtiles_style">Vector Tiles (Local)</option>
-      </select>
+        <option value="vtiles_style">Vector Tiles</option>
+      </select><br /><br />
+      <div id="staging-link" class="link-button">Open in Vtiles</div>
     </div>
 
-    <!-- Map comparison -->
     <div id="comparison-container"></div>
 
     <script>
       const production_options = {
-        map_style:
-          "https://www.openhistoricalmap.org/map-styles/historical/historical.json",
-        vtiles_style: "./../map-styles/production.json",
+        map_style: "https://www.openhistoricalmap.org/map-styles/historical/historical.json",
+        vtiles_style: "https://vtiles.openhistoricalmap.org/maps/osm/style.json",
       };
 
       const staging_options = {
-        map_style:
-          "https://www.staging.openhistoricalmap.org/map-styles/historical/historical.json",
-        vtiles_style: "./../map-styles/staging.json",
+        map_style: "https://www.staging.openhistoricalmap.org/map-styles/historical/historical.json",
+        vtiles_style: "https://vtiles.staging.openhistoricalmap.org/maps/osm/style.json",
       };
 
       let beforeMap, afterMap, compareControl;
@@ -133,24 +95,18 @@
         const params = new URLSearchParams(window.location.search);
         return {
           prod: params.get("prod") || "map_style",
-          staging: params.get("staging") || "vtiles_style",
+          staging: params.get("staging") || "map_style",
         };
       }
 
       function setURLParams(prod, staging) {
         const params = new URLSearchParams({ prod, staging });
-        window.history.replaceState(
-          {},
-          "",
-          `${location.pathname}?${params}${location.hash}`
-        );
+        window.history.replaceState({}, "", `${location.pathname}?${params}${location.hash}`);
       }
 
       function getCenterZoomFromHash() {
         const hash = window.location.hash;
-        let zoom = 10,
-          lat = 49.9521,
-          lng = 8.524;
+        let zoom = 10, lat = 49.9521, lng = 8.524;
         const match = hash.match(/#(\d+\.?\d*)\/([-\d.]+)\/([-\d.]+)/);
         if (match) {
           zoom = parseFloat(match[1]);
@@ -161,55 +117,46 @@
       }
 
       function enableHoverPopup(map, id, tooltipEnabled) {
-        const popup = new maplibregl.Popup({
-          closeButton: false,
-          closeOnClick: false,
-        });
-
+        const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false });
         map.on("mousemove", (e) => {
           if (!tooltipEnabled()) return popup.remove();
-
-          const layerIds = map
-            .getStyle()
-            .layers.filter((l) =>
-              ["fill", "line", "circle", "symbol"].includes(l.type)
-            )
-            .map((l) => l.id);
-
-          const features = map.queryRenderedFeatures(e.point, {
-            layers: layerIds,
-          });
+          const layers = map.getStyle().layers.filter(l => ["fill", "line", "circle", "symbol"].includes(l.type));
+          const features = map.queryRenderedFeatures(e.point, { layers: layers.map(l => l.id) });
           if (!features.length) return popup.remove();
-
-          const props = Object.entries(features[0].properties || {})
+          const feature = features[0];
+          const props = Object.entries(feature.properties || {})
             .map(([key, val]) => `<strong>${key}</strong>: ${val}`)
             .join("<br>");
-
+          const layerName = `<div><strong>Layer:</strong> ${feature.layer.id}</div>`;
           popup
             .setLngLat(e.lngLat)
-            .setHTML(
-              `<div style="max-height: 200px; overflow-y: auto;">${props}</div>`
-            )
+            .setHTML(`<div style="max-height: 200px; overflow-y: auto;">${layerName}<hr style="margin:4px 0;">${props}</div>`)
             .addTo(map);
         });
-
         map.on("mouseleave", () => popup.remove());
+      }
+
+      function injectBackgroundLayerIfMissing(map) {
+        const hasBackground = map.getStyle().layers.some(l => l.type === 'background');
+        if (!hasBackground) {
+          map.addLayer({
+            id: 'background',
+            type: 'background',
+            paint: { 'background-color': '#000000' }
+          }, map.getStyle().layers[0]?.id);
+        }
       }
 
       function createMaps(prodKey, stagingKey) {
         const container = document.getElementById("comparison-container");
-        container.innerHTML = `
-        <div id="before" class="map"></div>
-        <div id="after" class="map"></div>
-      `;
+        container.innerHTML = `<div id="before" class="map"></div><div id="after" class="map"></div>`;
 
         if (compareControl && compareControl.swipe) {
           compareControl.swipe.remove();
         }
 
         const { center, zoom } = getCenterZoomFromHash();
-        const tooltipEnabled = () =>
-          document.getElementById("tooltip-toggle").checked;
+        const tooltipEnabled = () => document.getElementById("tooltip-toggle").checked;
 
         beforeMap = new maplibregl.Map({
           container: "before",
@@ -228,17 +175,44 @@
         });
 
         beforeMap.on("load", () => {
+          injectBackgroundLayerIfMissing(beforeMap);
           enableHoverPopup(beforeMap, "before", tooltipEnabled);
+          syncVtilesLinksWithMap();
         });
 
         afterMap.on("load", () => {
+          injectBackgroundLayerIfMissing(afterMap);
           enableHoverPopup(afterMap, "after", tooltipEnabled);
-          compareControl = new mapboxgl.Compare(
-            beforeMap,
-            afterMap,
-            "#comparison-container"
-          );
+          compareControl = new mapboxgl.Compare(beforeMap, afterMap, "#comparison-container");
         });
+      }
+
+      function syncVtilesLinksWithMap() {
+        const prodLink = document.getElementById("prod-link");
+        const stagingLink = document.getElementById("staging-link");
+
+        function getHash(map) {
+          const center = map.getCenter();
+          const zoom = map.getZoom().toFixed(2);
+          const lat = center.lat.toFixed(5);
+          const lng = center.lng.toFixed(5);
+          return `#${zoom}/${lat}/${lng}`;
+        }
+
+        function updateLinks() {
+          prodLink.onclick = () => {
+            const hash = getHash(beforeMap);
+            window.open(`https://vtiles.openhistoricalmap.org/${hash}`, "_blank");
+          };
+          stagingLink.onclick = () => {
+            const hash = getHash(afterMap);
+            window.open(`https://vtiles.staging.openhistoricalmap.org/${hash}`, "_blank");
+          };
+        }
+
+        updateLinks();
+        if (beforeMap) beforeMap.on("moveend", updateLinks);
+        if (afterMap) afterMap.on("moveend", updateLinks);
       }
 
       document.addEventListener("DOMContentLoaded", () => {
@@ -261,11 +235,9 @@
           createMaps(prodSelect.value, stagingSelect.value);
         });
 
-        document
-          .getElementById("tooltip-toggle")
-          .addEventListener("change", () => {
-            createMaps(prodSelect.value, stagingSelect.value);
-          });
+        document.getElementById("tooltip-toggle").addEventListener("change", () => {
+          createMaps(prodSelect.value, stagingSelect.value);
+        });
       });
     </script>
   </body>
