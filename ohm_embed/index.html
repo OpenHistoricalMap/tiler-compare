@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OHM Prod-Stag embed tiler</title>
+    <link href="https://api.mapbox.com/mapbox-gl-js/v2.3.1/mapbox-gl.css" rel="stylesheet" />
+    <script src="https://api.mapbox.com/mapbox-gl-js/v2.3.1/mapbox-gl.js"></script>
+    <style>
+      body { margin: 0; }
+      #navbar {
+        position: absolute;
+        width: 100%;
+        height: 40px;
+        top: 0;
+        z-index: 222;
+        display: flex;
+        align-items: center;
+        background-color: #000;
+        color: white;
+      }
+      #navbar > div { flex: 1; text-align: center; }
+      #navbar > div:first-child { text-align: left; margin-left: 10%; }
+      #navbar > div:last-child { text-align: right; margin-right: 10%; }
+      #map {
+        position: fixed;
+        top: 0px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 20000;
+        height: 150px;
+        width: 150px;
+      }
+      #iframeContainer {
+        display: flex;
+        flex-direction: row;
+        height: 100vh;
+        width: 100%;
+      }
+      iframe {
+        flex-grow: 1;
+        width: 100%;
+        height: 100vh;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="navbar">
+      <div>
+        <a id="href_prod" href="#" target="_blank" style="color: #2776CA; text-decoration: none;">
+          <h5 id="title_prod">Tiler Production</h5>
+        </a>
+      </div>
+      <div>
+        <a id="href_staging" href="#" target="_blank" style="color: #2776CA; text-decoration: none;">
+          <h5 id="title_staging">Tiler Staging</h5>
+        </a>
+      </div>
+    </div>
+
+    <div id="iframeContainer">
+      <iframe id="vtile_prod" src=""></iframe>
+      <iframe id="vtile_staging" src=""></iframe>
+    </div>
+
+    <div id="map"></div>
+
+<script>
+  mapboxgl.accessToken = "pk.eyJ1IjoicnViZW4iLCJhIjoiY2xubDNiaHFwMXZjaDJtcmk3eW44NXJkaiJ9.vG8Vmq6bgcmiKKtmuV_fjw";
+
+  const map = new mapboxgl.Map({
+    container: "map",
+    style: "mapbox://styles/mapbox/streets-v11",
+    center: [0, 0],
+    zoom: 2,
+    hash: false, // No lo usamos automáticamente
+  });
+
+  function parseHashParams() {
+    const hash = location.hash.substring(1); // Remove #
+    const parts = hash.split("&");
+    const coords = parts[0]?.split("/") || [];
+    const date = parts[1]?.startsWith("date=") ? parts[1].split("=")[1] : "1500";
+
+    if (coords.length === 3) {
+      return {
+        zoom: parseFloat(coords[0]),
+        lat: parseFloat(coords[1]),
+        lng: parseFloat(coords[2]),
+        date,
+      };
+    }
+
+    return {
+      zoom: 2,
+      lat: 0,
+      lng: 0,
+      date: "1500",
+    };
+  }
+
+  function updateHash(zoom, lat, lng, date) {
+    const newHash = `#${zoom.toFixed(2)}/${lat.toFixed(4)}/${lng.toFixed(4)}&date=${date}`;
+    history.replaceState(null, null, newHash);
+  }
+
+  function frameUpdate(env, zoom, lat, lng, date) {
+    const iframe = document.getElementById("vtile_" + env);
+    const title = document.getElementById("title_" + env);
+    const aTag = document.getElementById("href_" + env);
+    const layer = env === "prod" ? "O" : "O_staging";
+    const url = `https://embed.openhistoricalmap.org/#map=${zoom.toFixed(2)}/${lat.toFixed(4)}/${lng.toFixed(4)}&date=${date}&layer=${layer}`;
+    iframe.src = url;
+    title.textContent = url;
+    aTag.href = url;
+  }
+
+  map.on("load", () => {
+    const { zoom, lat, lng, date } = parseHashParams();
+    map.setZoom(zoom);
+    map.setCenter([lng, lat]);
+
+    frameUpdate("prod", zoom, lat, lng, date);
+    frameUpdate("staging", zoom, lat, lng, date);
+  });
+
+  map.on("moveend", () => {
+    const center = map.getCenter();
+    const zoom = map.getZoom();
+    const { date } = parseHashParams();
+    updateHash(zoom, center.lat, center.lng, date);
+    frameUpdate("prod", zoom, center.lat, center.lng, date);
+    frameUpdate("staging", zoom, center.lat, center.lng, date);
+  });
+</script>
+  </body>
+</html>
