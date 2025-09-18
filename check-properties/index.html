@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>OpenHistoricalMap - Staging con control de capas</title>
+    <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
+
+    <link href="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.css" rel="stylesheet" />
+    <script src="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.js"></script>
+
+    <style>
+      html, body {
+        margin: 0; padding: 0; height: 100%; overflow: hidden;
+        font-family: sans-serif;
+      }
+      #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+
+      #layer-toggle {
+        position: absolute;
+        top: 10px; left: 10px;
+        background: #333;
+        color: white;
+        padding: 6px 10px;
+        border-radius: 4px;
+        cursor: pointer;
+        z-index: 1100;
+        font-size: 13px;
+      }
+
+      #layer-panel {
+        position: absolute;
+        top: 45px; left: 10px;
+        background: rgba(0,0,0,0.7);
+        color: white;
+        max-height: 50%;
+        overflow-y: auto;
+        padding: 10px;
+        border-radius: 6px;
+        z-index: 1000; font-size: 13px;
+        display: none; /* empieza oculto */
+      }
+
+      #attribute-table {
+        position: absolute; bottom: 0; left: 0; right: 0;
+        max-height: 70%; background: rgba(255,255,255,0.95);
+        overflow-y: auto; border-top: 2px solid #444;
+        font-size: 13px; padding: 8px;
+        display: flex; flex-wrap: wrap; gap: 10px;
+      }
+      .feature-card {
+        background: white; border: 1px solid #ccc; border-radius: 6px;
+        padding: 6px; font-size: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        max-height: 220px; overflow-y: auto; flex: 1 1 250px;
+      }
+      .feature-card h4 {
+        margin: 3px 0; font-size: 13px;
+        border-bottom: 1px solid #ddd; padding-bottom: 2px;
+      }
+      .feature-card table { width: 100%; border-collapse: collapse; }
+      .feature-card td {
+        border-bottom: 1px solid #eee;
+        padding: 2px 4px; word-break: break-word;
+      }
+      .feature-card tr:last-child td { border-bottom: none; }
+      .highlight-start { background: #c6f6c6; font-weight: bold; } /* verde */
+      .highlight-end { background: #fff6b3; font-weight: bold; }   /* amarillo */
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+    <div id="layer-toggle">☰ Capas</div>
+    <div id="layer-panel"><strong>Capas</strong><br/></div>
+    <div id="attribute-table"><em>Haz click en un objeto para ver sus atributos...</em></div>
+
+    <script>
+      const staging_options = {
+        vtiles_style: "https://vtiles.staging.openhistoricalmap.org/maps/osm/style.json",
+      };
+
+      function getCenterZoomFromHash() {
+        const hash = window.location.hash;
+        let zoom = 10, lat = 49.9521, lng = 8.524;
+        const match = hash.match(/#(\d+\.?\d*)\/([-\d.]+)\/([-\d.]+)/);
+        if (match) {
+          zoom = parseFloat(match[1]);
+          lat = parseFloat(match[2]);
+          lng = parseFloat(match[3]);
+        }
+        return { center: [lng, lat], zoom };
+      }
+
+      function injectBackgroundLayerIfMissing(map) {
+        const hasBackground = map.getStyle().layers.some(l => l.type === "background");
+        if (!hasBackground) {
+          map.addLayer({ id: "background", type: "background",
+            paint: { "background-color": "#000000" } }, 
+            map.getStyle().layers[0]?.id);
+        }
+      }
+
+      function extractDate(feature, keyDec, keyString) {
+        if (feature.properties[keyDec] !== undefined) {
+          return parseFloat(feature.properties[keyDec]);
+        }
+        if (feature.properties[keyString] !== undefined) {
+          const val = feature.properties[keyString];
+          const year = parseInt(val.toString().substring(0,4));
+          return isNaN(year) ? Infinity : year;
+        }
+        return Infinity;
+      }
+
+      document.addEventListener("DOMContentLoaded", () => {
+        const { center, zoom } = getCenterZoomFromHash();
+
+        const map = new maplibregl.Map({
+          container: "map",
+          style: staging_options.vtiles_style,
+          center, zoom, hash: true,
+        });
+
+        // Toggle del panel de capas
+        const toggleBtn = document.getElementById("layer-toggle");
+        const panel = document.getElementById("layer-panel");
+        toggleBtn.addEventListener("click", () => {
+          panel.style.display = (panel.style.display === "none" || panel.style.display === "") ? "block" : "none";
+        });
+
+        map.on("load", () => {
+          injectBackgroundLayerIfMissing(map);
+
+          // Construir lista de capas
+          const layers = map.getStyle().layers;
+
+          layers.forEach(layer => {
+            if(layer.type === "background") return;
+            const isDefaultVisible = (layer.id === "land_ohm_lines");
+            map.setLayoutProperty(layer.id, "visibility", isDefaultVisible ? "visible" : "none");
+
+            const item = document.createElement("div");
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.checked = isDefaultVisible;
+            checkbox.id = "chk_" + layer.id;
+            checkbox.addEventListener("change", (e) => {
+              map.setLayoutProperty(layer.id, "visibility", e.target.checked ? "visible" : "none");
+            });
+            const label = document.createElement("label");
+            label.htmlFor = checkbox.id;
+            label.innerText = " " + layer.id;
+
+            item.appendChild(checkbox); item.appendChild(label);
+            panel.appendChild(item);
+          });
+
+          // Al click ordenar y mostrar features en cards
+          map.on("click", (e) => {
+            const boxSize = 5; // tolerancia en píxeles (5px alrededor del click)
+            const features = map.queryRenderedFeatures([
+            [e.point.x - boxSize, e.point.y - boxSize],
+            [e.point.x + boxSize, e.point.y + boxSize]
+            ]);
+            const tableDiv = document.getElementById("attribute-table");
+
+            if (!features.length) {
+              tableDiv.innerHTML = "<em>No hay objetos en este punto.</em>";
+              return;
+            }
+            const sorted = features.sort((a,b) => {
+              const aStart = extractDate(a, "start_decdate", "start_date");
+              const bStart = extractDate(b, "start_decdate", "start_date");
+              if (aStart !== bStart) return aStart - bStart;
+              const aEnd = extractDate(a, "end_decdate", "end_date");
+              const bEnd = extractDate(b, "end_decdate", "end_date");
+              return aEnd - bEnd;
+            });
+
+            tableDiv.innerHTML = ""; 
+            sorted.forEach((feature, idx) => {
+              const card = document.createElement("div");
+              card.className = "feature-card";
+
+              let html = `<h4> Segment ${idx+1} : ${feature.layer.id}`;
+              if (feature.id !== undefined) {
+                html += ` | <small>Feature ID: ${feature.id}</small>`;
+              }
+              html += `</h4><table>`;
+
+              for (const [key, value] of Object.entries(feature.properties)) {
+                let cls = "";
+                if (key === "start_date") cls = "highlight-start";
+                if (key === "end_date") cls = "highlight-end";
+                html += `<tr class="${cls}"><td><strong>${key}</strong></td><td>${value}</td></tr>`;
+              }
+
+              html += "</table>";
+              card.innerHTML = html;
+              tableDiv.appendChild(card);
+            });
+          });
+        });
+      });
+    </script>
+  </body>
+</html>
