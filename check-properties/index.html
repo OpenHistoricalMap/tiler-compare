@@ -49,7 +49,7 @@
         padding: 10px;
         border-radius: 6px;
         z-index: 1000; font-size: 13px;
-        display: none; /* empieza oculto */
+        display: none; /* starts hidden */
       }
 
       #attribute-table {
@@ -74,8 +74,8 @@
         padding: 2px 4px; word-break: break-word;
       }
       .feature-card tr:last-child td { border-bottom: none; }
-      .highlight-start { background: #c6f6c6; font-weight: bold; } /* verde */
-      .highlight-end { background: #fff6b3; font-weight: bold; }   /* amarillo */
+      .highlight-start { background: #c6f6c6; font-weight: bold; } /* green */
+      .highlight-end { background: #fff6b3; font-weight: bold; }   /* yellow */
     </style>
   </head>
   <body>
@@ -86,9 +86,10 @@
     <div id="attribute-table"><em>Haz click en un objeto para ver sus atributos...</em></div>
 
     <script>
-      // Detectar entorno desde parámetro URL (?env=staging) o default production
+      // Detect environment from URL parameter (?env=staging) or default production
       const urlParams = new URLSearchParams(window.location.search);
       const env = urlParams.get('env') || 'production';
+      const featureId = urlParams.get('id'); // ID of the object to search for
       
       const staging_options = {
         vtiles_style: "https://vtiles.staging.openhistoricalmap.org/maps/osm/style.json",
@@ -133,12 +134,205 @@
         return Infinity;
       }
 
+      function updateUrlWithFeatureId(feature) {
+        // Get the feature ID (can be in feature.id or in properties)
+        let id = null;
+        if (feature.id !== undefined) {
+          id = feature.id.toString();
+        } else if (feature.properties && feature.properties.id !== undefined) {
+          id = feature.properties.id.toString();
+        } else if (feature.properties && feature.properties.osm_id !== undefined) {
+          id = feature.properties.osm_id.toString();
+        }
+        
+        if (!id) return;
+        
+        // Update URL without reloading the page
+        const url = new URL(window.location);
+        url.searchParams.set('id', id);
+        // Keep the env parameter if it exists
+        if (env) {
+          url.searchParams.set('env', env);
+        }
+        window.history.replaceState({}, '', url);
+      }
+
+      function displayFeatures(features, map) {
+        const tableDiv = document.getElementById("attribute-table");
+        
+        if (!features.length) {
+          tableDiv.innerHTML = "<em>No objects found.</em>";
+          // Clear the ID from URL if there are no objects
+          const url = new URL(window.location);
+          url.searchParams.delete('id');
+          window.history.replaceState({}, '', url);
+          return;
+        }
+        
+        const sorted = features.sort((a,b) => {
+          const aStart = extractDate(a, "start_decdate", "start_date");
+          const bStart = extractDate(b, "start_decdate", "start_date");
+          if (aStart !== bStart) return aStart - bStart;
+          const aEnd = extractDate(a, "end_decdate", "end_date");
+          const bEnd = extractDate(b, "end_decdate", "end_date");
+          return aEnd - bEnd;
+        });
+
+        // Update URL with the ID of the first feature (the most relevant)
+        if (sorted.length > 0) {
+          updateUrlWithFeatureId(sorted[0]);
+        }
+
+        tableDiv.innerHTML = ""; 
+        sorted.forEach((feature, idx) => {
+          const card = document.createElement("div");
+          card.className = "feature-card";
+
+          let html = `<h4> Segment ${idx+1} : ${feature.layer?.id || 'unknown'}`;
+          if (feature.id !== undefined) {
+            html += ` | <small>Feature ID: ${feature.id}</small>`;
+          }
+          html += `</h4><table>`;
+
+          for (const [key, value] of Object.entries(feature.properties)) {
+            let cls = "";
+            if (key === "start_date") cls = "highlight-start";
+            if (key === "end_date") cls = "highlight-end";
+            html += `<tr class="${cls}"><td><strong>${key}</strong></td><td>${value}</td></tr>`;
+          }
+
+          html += "</table>";
+          card.innerHTML = html;
+          tableDiv.appendChild(card);
+        });
+      }
+
+      function findFeatureById(map, targetId) {
+        if (!targetId) return;
+        
+        const layers = map.getStyle().layers;
+        let foundFeature = null;
+        let foundLayer = null;
+        
+        // First, temporarily activate all layers to enable searching
+        const originalVisibility = {};
+        layers.forEach(layer => {
+          if (layer.type !== "background") {
+            originalVisibility[layer.id] = map.getLayoutProperty(layer.id, "visibility");
+            map.setLayoutProperty(layer.id, "visibility", "visible");
+          }
+        });
+        
+        // Function to search for the feature
+        const searchFeature = () => {
+          // Search in all rendered features
+          const allFeatures = map.queryRenderedFeatures([
+            [0, 0],
+            [map.getCanvas().width, map.getCanvas().height]
+          ]);
+          
+          // Search for the feature with the corresponding ID
+          const matching = allFeatures.filter(f => {
+            if (f.id !== undefined) {
+              return f.id.toString() === targetId.toString();
+            }
+            // Also search in properties in case the ID is there
+            if (f.properties && f.properties.id !== undefined) {
+              return f.properties.id.toString() === targetId.toString();
+            }
+            if (f.properties && f.properties.osm_id !== undefined) {
+              return f.properties.osm_id.toString() === targetId.toString();
+            }
+            return false;
+          });
+          
+          if (matching.length > 0) {
+            foundFeature = matching[0];
+            foundLayer = layers.find(l => l.id === foundFeature.layer.id);
+            
+            // Restore original visibility but keep the found layer visible
+            layers.forEach(layer => {
+              if (layer.type !== "background") {
+                if (layer.id === foundLayer.id) {
+                  map.setLayoutProperty(layer.id, "visibility", "visible");
+                  const checkbox = document.getElementById("chk_" + layer.id);
+                  if (checkbox) checkbox.checked = true;
+                } else {
+                  map.setLayoutProperty(layer.id, "visibility", originalVisibility[layer.id] || "none");
+                  const checkbox = document.getElementById("chk_" + layer.id);
+                  if (checkbox) checkbox.checked = originalVisibility[layer.id] === "visible";
+                }
+              }
+            });
+            
+            // Get the center of the feature to zoom in
+            let centerCoords = null;
+            let targetZoom = 15;
+            
+            if (foundFeature.geometry.type === "Point" && foundFeature.geometry.coordinates) {
+              centerCoords = foundFeature.geometry.coordinates;
+            } else if (foundFeature.geometry.type === "LineString" && foundFeature.geometry.coordinates) {
+              const coords = foundFeature.geometry.coordinates;
+              const lngs = coords.map(c => c[0]);
+              const lats = coords.map(c => c[1]);
+              centerCoords = [
+                (Math.min(...lngs) + Math.max(...lngs)) / 2,
+                (Math.min(...lats) + Math.max(...lats)) / 2
+              ];
+            } else if (foundFeature.geometry.type === "MultiLineString" && foundFeature.geometry.coordinates) {
+              const allCoords = foundFeature.geometry.coordinates.flat();
+              const lngs = allCoords.map(c => c[0]);
+              const lats = allCoords.map(c => c[1]);
+              centerCoords = [
+                (Math.min(...lngs) + Math.max(...lngs)) / 2,
+                (Math.min(...lats) + Math.max(...lats)) / 2
+              ];
+            } else if (foundFeature.geometry.type === "Polygon" && foundFeature.geometry.coordinates) {
+              const allCoords = foundFeature.geometry.coordinates[0]; // exterior ring
+              const lngs = allCoords.map(c => c[0]);
+              const lats = allCoords.map(c => c[1]);
+              centerCoords = [
+                (Math.min(...lngs) + Math.max(...lngs)) / 2,
+                (Math.min(...lats) + Math.max(...lats)) / 2
+              ];
+            }
+            
+            if (centerCoords) {
+              map.flyTo({
+                center: centerCoords,
+                zoom: Math.max(map.getZoom(), targetZoom)
+              });
+              map.once('moveend', () => {
+                displayFeatures([foundFeature], map);
+              });
+            } else {
+              displayFeatures([foundFeature], map);
+            }
+          } else {
+            // Not found, restore original visibility
+            layers.forEach(layer => {
+              if (layer.type !== "background") {
+                map.setLayoutProperty(layer.id, "visibility", originalVisibility[layer.id] || "none");
+                const checkbox = document.getElementById("chk_" + layer.id);
+                if (checkbox) checkbox.checked = originalVisibility[layer.id] === "visible";
+              }
+            });
+            
+            const tableDiv = document.getElementById("attribute-table");
+            tableDiv.innerHTML = `<em>No object found with ID: ${targetId}</em>`;
+          }
+        };
+        
+        // Execute the search after activating the layers
+        setTimeout(searchFeature, 500);
+      }
+
       document.addEventListener("DOMContentLoaded", () => {
         const { center, zoom } = getCenterZoomFromHash();
         
-        // Mostrar indicador de entorno
+        // Show environment indicator
         const envIndicator = document.getElementById("env-indicator");
-        envIndicator.textContent = `Entorno: ${env.toUpperCase()}`;
+        envIndicator.textContent = `Environment: ${env.toUpperCase()}`;
         envIndicator.style.background = env === 'production' ? 'rgba(220, 38, 38, 0.8)' : 'rgba(34, 197, 94, 0.8)';
 
         const map = new maplibregl.Map({
@@ -147,7 +341,7 @@
           center, zoom, hash: true,
         });
 
-        // Toggle del panel de capas
+        // Toggle layer panel
         const toggleBtn = document.getElementById("layer-toggle");
         const panel = document.getElementById("layer-panel");
         toggleBtn.addEventListener("click", () => {
@@ -157,7 +351,7 @@
         map.on("load", () => {
           injectBackgroundLayerIfMissing(map);
 
-          // Construir lista de capas
+          // Build layer list
           const layers = map.getStyle().layers;
 
           layers.forEach(layer => {
@@ -181,51 +375,32 @@
             panel.appendChild(item);
           });
 
-          // Al click ordenar y mostrar features en cards
+          // On click, sort and display features in cards
           map.on("click", (e) => {
-            const boxSize = 5; // tolerancia en píxeles (5px alrededor del click)
+            const boxSize = 5; // tolerance in pixels (5px around the click)
             const features = map.queryRenderedFeatures([
             [e.point.x - boxSize, e.point.y - boxSize],
             [e.point.x + boxSize, e.point.y + boxSize]
             ]);
-            const tableDiv = document.getElementById("attribute-table");
-
+            
             if (!features.length) {
-              tableDiv.innerHTML = "<em>No hay objetos en este punto.</em>";
+              const tableDiv = document.getElementById("attribute-table");
+              tableDiv.innerHTML = "<em>No objects at this point.</em>";
               return;
             }
-            const sorted = features.sort((a,b) => {
-              const aStart = extractDate(a, "start_decdate", "start_date");
-              const bStart = extractDate(b, "start_decdate", "start_date");
-              if (aStart !== bStart) return aStart - bStart;
-              const aEnd = extractDate(a, "end_decdate", "end_date");
-              const bEnd = extractDate(b, "end_decdate", "end_date");
-              return aEnd - bEnd;
-            });
-
-            tableDiv.innerHTML = ""; 
-            sorted.forEach((feature, idx) => {
-              const card = document.createElement("div");
-              card.className = "feature-card";
-
-              let html = `<h4> Segment ${idx+1} : ${feature.layer.id}`;
-              if (feature.id !== undefined) {
-                html += ` | <small>Feature ID: ${feature.id}</small>`;
-              }
-              html += `</h4><table>`;
-
-              for (const [key, value] of Object.entries(feature.properties)) {
-                let cls = "";
-                if (key === "start_date") cls = "highlight-start";
-                if (key === "end_date") cls = "highlight-end";
-                html += `<tr class="${cls}"><td><strong>${key}</strong></td><td>${value}</td></tr>`;
-              }
-
-              html += "</table>";
-              card.innerHTML = html;
-              tableDiv.appendChild(card);
-            });
+            
+            displayFeatures(features, map);
           });
+          
+          // If there's an ID in the URL, search for and display the feature
+          if (featureId) {
+            // Wait for the map to be completely rendered
+            map.once('idle', () => {
+              setTimeout(() => {
+                findFeatureById(map, featureId);
+              }, 1000);
+            });
+          }
         });
       });
     </script>
