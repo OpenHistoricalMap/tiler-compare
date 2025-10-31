@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>OpenHistoricalMap - Staging con control de capas</title>
+    <title>OpenHistoricalMap - Comparador de propiedades</title>
     <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
 
     <link href="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.css" rel="stylesheet" />
@@ -25,6 +25,18 @@
         cursor: pointer;
         z-index: 1100;
         font-size: 13px;
+      }
+
+      #env-indicator {
+        position: absolute;
+        top: 10px; right: 10px;
+        background: rgba(0,0,0,0.7);
+        color: white;
+        padding: 6px 10px;
+        border-radius: 4px;
+        z-index: 1100;
+        font-size: 12px;
+        font-weight: bold;
       }
 
       #layer-panel {
@@ -69,13 +81,24 @@
   <body>
     <div id="map"></div>
     <div id="layer-toggle">☰ Capas</div>
+    <div id="env-indicator"></div>
     <div id="layer-panel"><strong>Capas</strong><br/></div>
     <div id="attribute-table"><em>Haz click en un objeto para ver sus atributos...</em></div>
 
     <script>
+      // Detectar entorno desde parámetro URL (?env=staging) o default production
+      const urlParams = new URLSearchParams(window.location.search);
+      const env = urlParams.get('env') || 'production';
+      
       const staging_options = {
         vtiles_style: "https://vtiles.staging.openhistoricalmap.org/maps/osm/style.json",
       };
+      
+      const production_options = {
+        vtiles_style: "https://vtiles.openhistoricalmap.org/maps/osm/style.json",
+      };
+      
+      const options = env === 'production' ? production_options : staging_options;
 
       function getCenterZoomFromHash() {
         const hash = window.location.hash;
@@ -112,10 +135,15 @@
 
       document.addEventListener("DOMContentLoaded", () => {
         const { center, zoom } = getCenterZoomFromHash();
+        
+        // Mostrar indicador de entorno
+        const envIndicator = document.getElementById("env-indicator");
+        envIndicator.textContent = `Entorno: ${env.toUpperCase()}`;
+        envIndicator.style.background = env === 'production' ? 'rgba(220, 38, 38, 0.8)' : 'rgba(34, 197, 94, 0.8)';
 
         const map = new maplibregl.Map({
           container: "map",
-          style: staging_options.vtiles_style,
+          style: options.vtiles_style,
           center, zoom, hash: true,
         });
 
