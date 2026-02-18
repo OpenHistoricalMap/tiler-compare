@@ -42,14 +42,56 @@
       #layer-panel {
         position: absolute;
         top: 45px; left: 10px;
-        background: rgba(0,0,0,0.7);
+        background: rgba(0,0,0,0.85);
         color: white;
-        max-height: 50%;
+        max-height: 70%;
         overflow-y: auto;
         padding: 10px;
         border-radius: 6px;
-        z-index: 1000; font-size: 13px;
-        display: none; /* starts hidden */
+        z-index: 1000;
+        font-size: 13px;
+        display: none;
+        min-width: 220px;
+      }
+
+      .map-group {
+        margin-bottom: 8px;
+        border-bottom: 1px solid rgba(255,255,255,0.2);
+        padding-bottom: 6px;
+      }
+      .map-group:last-child { border-bottom: none; }
+
+      .map-group-header {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+        padding: 4px 0;
+        font-weight: bold;
+        font-size: 13px;
+      }
+      .map-group-header:hover { color: #8cf; }
+
+      .map-group-layers {
+        margin-left: 18px;
+        display: none;
+      }
+      .map-group-layers.expanded { display: block; }
+
+      .map-group-layers label {
+        display: block;
+        padding: 2px 0;
+        cursor: pointer;
+        font-size: 12px;
+      }
+      .map-group-layers label:hover { color: #8cf; }
+
+      .color-dot {
+        display: inline-block;
+        width: 10px; height: 10px;
+        border-radius: 50%;
+        margin-right: 4px;
+        vertical-align: middle;
       }
 
       #attribute-table {
@@ -74,32 +116,48 @@
         padding: 2px 4px; word-break: break-word;
       }
       .feature-card tr:last-child td { border-bottom: none; }
-      .highlight-start { background: #c6f6c6; font-weight: bold; } /* green */
-      .highlight-end { background: #fff6b3; font-weight: bold; }   /* yellow */
+      .highlight-start { background: #c6f6c6; font-weight: bold; }
+      .highlight-end { background: #fff6b3; font-weight: bold; }
+
+      #loading-indicator {
+        position: absolute;
+        top: 50%; left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(0,0,0,0.8);
+        color: white;
+        padding: 16px 24px;
+        border-radius: 8px;
+        z-index: 2000;
+        font-size: 14px;
+        display: none;
+      }
     </style>
   </head>
   <body>
     <div id="map"></div>
-    <div id="layer-toggle">☰ Capas</div>
+    <div id="layer-toggle">&#9776; Capas</div>
     <div id="env-indicator"></div>
-    <div id="layer-panel"><strong>Capas</strong><br/></div>
+    <div id="layer-panel"><strong>Fuentes (capabilities)</strong><br/><div id="sources-list"><em>Cargando fuentes...</em></div></div>
     <div id="attribute-table"><em>Haz click en un objeto para ver sus atributos...</em></div>
+    <div id="loading-indicator">Cargando fuentes...</div>
 
     <script>
-      // Detect environment from URL parameter (?env=staging) or default production
       const urlParams = new URLSearchParams(window.location.search);
       const env = urlParams.get('env') || 'production';
-      const featureId = urlParams.get('id'); // ID of the object to search for
-      
-      const staging_options = {
-        vtiles_style: "https://vtiles.ohmstaging.org/maps/osm/style.json",
-      };
-      
-      const production_options = {
-        vtiles_style: "https://vtiles.openhistoricalmap.org/maps/osm/style.json",
-      };
-      
-      const options = env === 'production' ? production_options : staging_options;
+      const featureId = urlParams.get('id');
+
+      const capabilitiesUrl = env === 'production'
+        ? 'https://vtiles.openhistoricalmap.org/capabilities'
+        : 'https://vtiles.ohmstaging.org/capabilities';
+
+      // Colors for each map source
+      const mapColors = [
+        '#e6194b', '#3cb44b', '#4363d8', '#f58231', '#911eb4',
+        '#42d4f4', '#f032e6', '#bfef45', '#fabebe', '#469990'
+      ];
+
+      // Track added MapLibre layer IDs per source layer
+      const addedLayerIds = {};
 
       function getCenterZoomFromHash() {
         const hash = window.location.hash;
@@ -113,29 +171,19 @@
         return { center: [lng, lat], zoom };
       }
 
-      function injectBackgroundLayerIfMissing(map) {
-        const hasBackground = map.getStyle().layers.some(l => l.type === "background");
-        if (!hasBackground) {
-          map.addLayer({ id: "background", type: "background",
-            paint: { "background-color": "#000000" } }, 
-            map.getStyle().layers[0]?.id);
-        }
-      }
-
       function extractDate(feature, keyDec, keyString) {
         if (feature.properties[keyDec] !== undefined) {
           return parseFloat(feature.properties[keyDec]);
         }
         if (feature.properties[keyString] !== undefined) {
           const val = feature.properties[keyString];
-          const year = parseInt(val.toString().substring(0,4));
+          const year = parseInt(val.toString().substring(0, 4));
           return isNaN(year) ? Infinity : year;
         }
         return Infinity;
       }
 
       function updateUrlWithFeatureId(feature) {
-        // Get the feature ID (can be in feature.id or in properties)
         let id = null;
         if (feature.id !== undefined) {
           id = feature.id.toString();
@@ -144,32 +192,25 @@
         } else if (feature.properties && feature.properties.osm_id !== undefined) {
           id = feature.properties.osm_id.toString();
         }
-        
         if (!id) return;
-        
-        // Update URL without reloading the page
         const url = new URL(window.location);
         url.searchParams.set('id', id);
-        // Keep the env parameter if it exists
-        if (env) {
-          url.searchParams.set('env', env);
-        }
+        if (env) url.searchParams.set('env', env);
         window.history.replaceState({}, '', url);
       }
 
-      function displayFeatures(features, map) {
+      function displayFeatures(features) {
         const tableDiv = document.getElementById("attribute-table");
-        
+
         if (!features.length) {
-          tableDiv.innerHTML = "<em>No objects found.</em>";
-          // Clear the ID from URL if there are no objects
+          tableDiv.innerHTML = "<em>No se encontraron objetos.</em>";
           const url = new URL(window.location);
           url.searchParams.delete('id');
           window.history.replaceState({}, '', url);
           return;
         }
-        
-        const sorted = features.sort((a,b) => {
+
+        const sorted = features.sort((a, b) => {
           const aStart = extractDate(a, "start_decdate", "start_date");
           const bStart = extractDate(b, "start_decdate", "start_date");
           if (aStart !== bStart) return aStart - bStart;
@@ -178,17 +219,14 @@
           return aEnd - bEnd;
         });
 
-        // Update URL with the ID of the first feature (the most relevant)
-        if (sorted.length > 0) {
-          updateUrlWithFeatureId(sorted[0]);
-        }
+        if (sorted.length > 0) updateUrlWithFeatureId(sorted[0]);
 
-        tableDiv.innerHTML = ""; 
+        tableDiv.innerHTML = "";
         sorted.forEach((feature, idx) => {
           const card = document.createElement("div");
           card.className = "feature-card";
 
-          let html = `<h4> Segment ${idx+1} : ${feature.layer?.id || 'unknown'}`;
+          let html = `<h4>Segment ${idx + 1} : ${feature.sourceLayer || 'unknown'}`;
           if (feature.id !== undefined) {
             html += ` | <small>Feature ID: ${feature.id}</small>`;
           }
@@ -207,137 +245,216 @@
         });
       }
 
-      function findFeatureById(map, targetId) {
-        if (!targetId) return;
-        
-        const layers = map.getStyle().layers;
-        let foundFeature = null;
-        let foundLayer = null;
-        
-        // First, temporarily activate all layers to enable searching
-        const originalVisibility = {};
-        layers.forEach(layer => {
-          if (layer.type !== "background") {
-            originalVisibility[layer.id] = map.getLayoutProperty(layer.id, "visibility");
-            map.setLayoutProperty(layer.id, "visibility", "visible");
-          }
+      function addSourceAndLayers(map, mapInfo, color) {
+        const sourceName = mapInfo.name;
+
+        // Add the main vector source for this map
+        map.addSource(sourceName, {
+          type: 'vector',
+          tiles: mapInfo.tiles,
+          minzoom: 0,
+          maxzoom: 20
         });
-        
-        // Function to search for the feature
-        const searchFeature = () => {
-          // Search in all rendered features
-          const allFeatures = map.queryRenderedFeatures([
-            [0, 0],
-            [map.getCanvas().width, map.getCanvas().height]
-          ]);
-          
-          // Search for the feature with the corresponding ID
-          const matching = allFeatures.filter(f => {
-            if (f.id !== undefined) {
-              return f.id.toString() === targetId.toString();
-            }
-            // Also search in properties in case the ID is there
-            if (f.properties && f.properties.id !== undefined) {
-              return f.properties.id.toString() === targetId.toString();
-            }
-            if (f.properties && f.properties.osm_id !== undefined) {
-              return f.properties.osm_id.toString() === targetId.toString();
-            }
-            return false;
+
+        addedLayerIds[sourceName] = [];
+
+        mapInfo.layers.forEach(layer => {
+          const layerBase = `${sourceName}__${layer.name}`;
+
+          // Add fill layer (polygons only)
+          const fillId = `${layerBase}__fill`;
+          map.addLayer({
+            id: fillId,
+            type: 'fill',
+            source: sourceName,
+            'source-layer': layer.name,
+            filter: ['==', '$type', 'Polygon'],
+            minzoom: layer.minzoom || 0,
+            maxzoom: (layer.maxzoom || 20) + 1,
+            paint: {
+              'fill-color': color,
+              'fill-opacity': 0.25,
+              'fill-outline-color': color
+            },
+            layout: { visibility: 'none' }
           });
-          
-          if (matching.length > 0) {
-            foundFeature = matching[0];
-            foundLayer = layers.find(l => l.id === foundFeature.layer.id);
-            
-            // Restore original visibility but keep the found layer visible
-            layers.forEach(layer => {
-              if (layer.type !== "background") {
-                if (layer.id === foundLayer.id) {
-                  map.setLayoutProperty(layer.id, "visibility", "visible");
-                  const checkbox = document.getElementById("chk_" + layer.id);
-                  if (checkbox) checkbox.checked = true;
-                } else {
-                  map.setLayoutProperty(layer.id, "visibility", originalVisibility[layer.id] || "none");
-                  const checkbox = document.getElementById("chk_" + layer.id);
-                  if (checkbox) checkbox.checked = originalVisibility[layer.id] === "visible";
-                }
-              }
+
+          // Add line layer (lines only)
+          const lineId = `${layerBase}__line`;
+          map.addLayer({
+            id: lineId,
+            type: 'line',
+            source: sourceName,
+            'source-layer': layer.name,
+            filter: ['==', '$type', 'LineString'],
+            minzoom: layer.minzoom || 0,
+            maxzoom: (layer.maxzoom || 20) + 1,
+            paint: {
+              'line-color': color,
+              'line-width': 2,
+              'line-opacity': 0.8
+            },
+            layout: { visibility: 'none' }
+          });
+
+          // Add circle layer (points only)
+          const circleId = `${layerBase}__circle`;
+          map.addLayer({
+            id: circleId,
+            type: 'circle',
+            source: sourceName,
+            'source-layer': layer.name,
+            filter: ['==', '$type', 'Point'],
+            minzoom: layer.minzoom || 0,
+            maxzoom: (layer.maxzoom || 20) + 1,
+            paint: {
+              'circle-color': color,
+              'circle-radius': 5,
+              'circle-opacity': 0.7,
+              'circle-stroke-color': '#fff',
+              'circle-stroke-width': 1
+            },
+            layout: { visibility: 'none' }
+          });
+
+          addedLayerIds[sourceName].push(
+            { layerName: layer.name, ids: [fillId, lineId, circleId] }
+          );
+        });
+      }
+
+      function setLayerVisibility(map, sourceName, layerName, visible) {
+        const entry = addedLayerIds[sourceName];
+        if (!entry) return;
+        const layerEntry = entry.find(e => e.layerName === layerName);
+        if (!layerEntry) return;
+        layerEntry.ids.forEach(id => {
+          map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
+        });
+      }
+
+      function setAllLayersVisibility(map, sourceName, visible) {
+        const entry = addedLayerIds[sourceName];
+        if (!entry) return;
+        entry.forEach(layerEntry => {
+          layerEntry.ids.forEach(id => {
+            map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
+          });
+        });
+      }
+
+      function buildLayerPanel(map, capabilities) {
+        const sourcesList = document.getElementById("sources-list");
+        sourcesList.innerHTML = "";
+
+        capabilities.maps.forEach((mapInfo, idx) => {
+          const color = mapColors[idx % mapColors.length];
+          const group = document.createElement("div");
+          group.className = "map-group";
+
+          // Group header with checkbox to toggle all layers
+          const header = document.createElement("div");
+          header.className = "map-group-header";
+
+          const groupCheckbox = document.createElement("input");
+          groupCheckbox.type = "checkbox";
+          groupCheckbox.id = `grp_${mapInfo.name}`;
+
+          const dot = document.createElement("span");
+          dot.className = "color-dot";
+          dot.style.background = color;
+
+          const headerLabel = document.createElement("span");
+          headerLabel.textContent = `${mapInfo.name} (${mapInfo.layers.length} capas)`;
+
+          const arrow = document.createElement("span");
+          arrow.textContent = " \u25B6";
+          arrow.style.fontSize = "10px";
+
+          header.appendChild(groupCheckbox);
+          header.appendChild(dot);
+          header.appendChild(headerLabel);
+          header.appendChild(arrow);
+
+          // Layers container
+          const layersDiv = document.createElement("div");
+          layersDiv.className = "map-group-layers";
+
+          const layerCheckboxes = [];
+
+          mapInfo.layers.forEach(layer => {
+            const layerLabel = document.createElement("label");
+            const cb = document.createElement("input");
+            cb.type = "checkbox";
+            cb.id = `chk_${mapInfo.name}__${layer.name}`;
+            cb.addEventListener("change", (e) => {
+              setLayerVisibility(map, mapInfo.name, layer.name, e.target.checked);
+              // Update group checkbox state
+              const allChecked = layerCheckboxes.every(c => c.checked);
+              const someChecked = layerCheckboxes.some(c => c.checked);
+              groupCheckbox.checked = allChecked;
+              groupCheckbox.indeterminate = someChecked && !allChecked;
             });
-            
-            // Get the center of the feature to zoom in
-            let centerCoords = null;
-            let targetZoom = 15;
-            
-            if (foundFeature.geometry.type === "Point" && foundFeature.geometry.coordinates) {
-              centerCoords = foundFeature.geometry.coordinates;
-            } else if (foundFeature.geometry.type === "LineString" && foundFeature.geometry.coordinates) {
-              const coords = foundFeature.geometry.coordinates;
-              const lngs = coords.map(c => c[0]);
-              const lats = coords.map(c => c[1]);
-              centerCoords = [
-                (Math.min(...lngs) + Math.max(...lngs)) / 2,
-                (Math.min(...lats) + Math.max(...lats)) / 2
-              ];
-            } else if (foundFeature.geometry.type === "MultiLineString" && foundFeature.geometry.coordinates) {
-              const allCoords = foundFeature.geometry.coordinates.flat();
-              const lngs = allCoords.map(c => c[0]);
-              const lats = allCoords.map(c => c[1]);
-              centerCoords = [
-                (Math.min(...lngs) + Math.max(...lngs)) / 2,
-                (Math.min(...lats) + Math.max(...lats)) / 2
-              ];
-            } else if (foundFeature.geometry.type === "Polygon" && foundFeature.geometry.coordinates) {
-              const allCoords = foundFeature.geometry.coordinates[0]; // exterior ring
-              const lngs = allCoords.map(c => c[0]);
-              const lats = allCoords.map(c => c[1]);
-              centerCoords = [
-                (Math.min(...lngs) + Math.max(...lngs)) / 2,
-                (Math.min(...lats) + Math.max(...lats)) / 2
-              ];
-            }
-            
-            if (centerCoords) {
-              map.flyTo({
-                center: centerCoords,
-                zoom: Math.max(map.getZoom(), targetZoom)
-              });
-              map.once('moveend', () => {
-                displayFeatures([foundFeature], map);
-              });
-            } else {
-              displayFeatures([foundFeature], map);
-            }
-          } else {
-            // Not found, restore original visibility
-            layers.forEach(layer => {
-              if (layer.type !== "background") {
-                map.setLayoutProperty(layer.id, "visibility", originalVisibility[layer.id] || "none");
-                const checkbox = document.getElementById("chk_" + layer.id);
-                if (checkbox) checkbox.checked = originalVisibility[layer.id] === "visible";
-              }
+            layerCheckboxes.push(cb);
+
+            layerLabel.appendChild(cb);
+            layerLabel.appendChild(document.createTextNode(` ${layer.name} (z${layer.minzoom}-${layer.maxzoom})`));
+            layersDiv.appendChild(layerLabel);
+          });
+
+          // Group checkbox toggles all layers
+          groupCheckbox.addEventListener("change", (e) => {
+            const checked = e.target.checked;
+            layerCheckboxes.forEach(cb => {
+              cb.checked = checked;
+              cb.dispatchEvent(new Event("change"));
             });
-            
-            const tableDiv = document.getElementById("attribute-table");
-            tableDiv.innerHTML = `<em>No object found with ID: ${targetId}</em>`;
-          }
-        };
-        
-        // Execute the search after activating the layers
-        setTimeout(searchFeature, 500);
+            setAllLayersVisibility(map, mapInfo.name, checked);
+          });
+
+          // Click header to expand/collapse
+          headerLabel.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const isExpanded = layersDiv.classList.contains("expanded");
+            layersDiv.classList.toggle("expanded");
+            arrow.textContent = isExpanded ? " \u25B6" : " \u25BC";
+          });
+          arrow.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const isExpanded = layersDiv.classList.contains("expanded");
+            layersDiv.classList.toggle("expanded");
+            arrow.textContent = isExpanded ? " \u25B6" : " \u25BC";
+          });
+
+          group.appendChild(header);
+          group.appendChild(layersDiv);
+          sourcesList.appendChild(group);
+
+          // Add the source and layers to the map
+          addSourceAndLayers(map, mapInfo, color);
+        });
       }
 
       document.addEventListener("DOMContentLoaded", () => {
         const { center, zoom } = getCenterZoomFromHash();
-        
-        // Show environment indicator
+
         const envIndicator = document.getElementById("env-indicator");
-        envIndicator.textContent = `Environment: ${env.toUpperCase()}`;
+        envIndicator.textContent = `Env: ${env.toUpperCase()}`;
         envIndicator.style.background = env === 'production' ? 'rgba(220, 38, 38, 0.8)' : 'rgba(34, 197, 94, 0.8)';
 
+        const loadingEl = document.getElementById("loading-indicator");
+        loadingEl.style.display = "block";
+
+        // Create map with empty style (no predefined layers)
         const map = new maplibregl.Map({
           container: "map",
-          style: options.vtiles_style,
+          style: {
+            version: 8,
+            sources: {},
+            layers: [
+              { id: "background", type: "background", paint: { "background-color": "#1a1a2e" } }
+            ]
+          },
           center, zoom, hash: true,
         });
 
@@ -349,52 +466,42 @@
         });
 
         map.on("load", () => {
-          injectBackgroundLayerIfMissing(map);
-
-          // Build layer list
-          const layers = map.getStyle().layers;
-
-          layers.forEach(layer => {
-            if(layer.type === "background") return;
-            const isDefaultVisible = (layer.id === "land_ohm_lines");
-            map.setLayoutProperty(layer.id, "visibility", isDefaultVisible ? "visible" : "none");
-
-            const item = document.createElement("div");
-            const checkbox = document.createElement("input");
-            checkbox.type = "checkbox";
-            checkbox.checked = isDefaultVisible;
-            checkbox.id = "chk_" + layer.id;
-            checkbox.addEventListener("change", (e) => {
-              map.setLayoutProperty(layer.id, "visibility", e.target.checked ? "visible" : "none");
+          // Fetch capabilities and build the UI
+          fetch(capabilitiesUrl)
+            .then(res => res.json())
+            .then(capabilities => {
+              loadingEl.style.display = "none";
+              buildLayerPanel(map, capabilities);
+            })
+            .catch(err => {
+              loadingEl.style.display = "none";
+              console.error("Error fetching capabilities:", err);
+              document.getElementById("sources-list").innerHTML =
+                `<em style="color:#f88">Error cargando fuentes: ${err.message}</em>`;
             });
-            const label = document.createElement("label");
-            label.htmlFor = checkbox.id;
-            label.innerText = " " + layer.id;
 
-            item.appendChild(checkbox); item.appendChild(label);
-            panel.appendChild(item);
-          });
-
-          // On click, sort and display features in cards
+          // On click, query rendered features and display attributes
           map.on("click", (e) => {
-            const boxSize = 5; // tolerance in pixels (5px around the click)
+            const boxSize = 5;
             const features = map.queryRenderedFeatures([
-            [e.point.x - boxSize, e.point.y - boxSize],
-            [e.point.x + boxSize, e.point.y + boxSize]
+              [e.point.x - boxSize, e.point.y - boxSize],
+              [e.point.x + boxSize, e.point.y + boxSize]
             ]);
-            
-            if (!features.length) {
-              const tableDiv = document.getElementById("attribute-table");
-              tableDiv.innerHTML = "<em>No objects at this point.</em>";
+
+            // Filter out the background layer
+            const filtered = features.filter(f => f.layer && f.layer.id !== "background");
+
+            if (!filtered.length) {
+              document.getElementById("attribute-table").innerHTML =
+                "<em>No hay objetos en este punto.</em>";
               return;
             }
-            
-            displayFeatures(features, map);
+
+            displayFeatures(filtered);
           });
-          
-          // If there's an ID in the URL, search for and display the feature
+
+          // If there's an ID in the URL, search for it
           if (featureId) {
-            // Wait for the map to be completely rendered
             map.once('idle', () => {
               setTimeout(() => {
                 findFeatureById(map, featureId);
@@ -403,6 +510,83 @@
           }
         });
       });
+
+      function findFeatureById(map, targetId) {
+        if (!targetId) return;
+
+        // Enable all layers temporarily
+        const allMapLayers = map.getStyle().layers;
+        const originalVisibility = {};
+        allMapLayers.forEach(layer => {
+          if (layer.type !== "background") {
+            originalVisibility[layer.id] = map.getLayoutProperty(layer.id, "visibility");
+            map.setLayoutProperty(layer.id, "visibility", "visible");
+          }
+        });
+
+        setTimeout(() => {
+          const allFeatures = map.queryRenderedFeatures([
+            [0, 0],
+            [map.getCanvas().width, map.getCanvas().height]
+          ]);
+
+          const matching = allFeatures.filter(f => {
+            if (f.id !== undefined) return f.id.toString() === targetId.toString();
+            if (f.properties && f.properties.id !== undefined)
+              return f.properties.id.toString() === targetId.toString();
+            if (f.properties && f.properties.osm_id !== undefined)
+              return f.properties.osm_id.toString() === targetId.toString();
+            return false;
+          });
+
+          // Restore visibility
+          allMapLayers.forEach(layer => {
+            if (layer.type !== "background") {
+              map.setLayoutProperty(layer.id, "visibility", originalVisibility[layer.id] || "none");
+            }
+          });
+
+          if (matching.length > 0) {
+            const f = matching[0];
+            // Make only the found feature's layers visible
+            if (f.source && f.sourceLayer) {
+              setLayerVisibility(map, f.source, f.sourceLayer, true);
+              const cb = document.getElementById(`chk_${f.source}__${f.sourceLayer}`);
+              if (cb) cb.checked = true;
+            }
+
+            let centerCoords = null;
+            const targetZoom = 15;
+            const geom = f.geometry;
+
+            if (geom.type === "Point" && geom.coordinates) {
+              centerCoords = geom.coordinates;
+            } else if (geom.coordinates) {
+              const allCoords = geom.type === "Polygon" ? geom.coordinates[0]
+                : geom.type === "MultiLineString" ? geom.coordinates.flat()
+                : geom.coordinates;
+              if (Array.isArray(allCoords) && allCoords.length) {
+                const lngs = allCoords.map(c => c[0]);
+                const lats = allCoords.map(c => c[1]);
+                centerCoords = [
+                  (Math.min(...lngs) + Math.max(...lngs)) / 2,
+                  (Math.min(...lats) + Math.max(...lats)) / 2
+                ];
+              }
+            }
+
+            if (centerCoords) {
+              map.flyTo({ center: centerCoords, zoom: Math.max(map.getZoom(), targetZoom) });
+              map.once('moveend', () => displayFeatures([f]));
+            } else {
+              displayFeatures([f]);
+            }
+          } else {
+            document.getElementById("attribute-table").innerHTML =
+              `<em>No se encontro objeto con ID: ${targetId}</em>`;
+          }
+        }, 500);
+      }
     </script>
   </body>
 </html>
