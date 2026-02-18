@@ -85,8 +85,8 @@
       };
 
       const staging_options = {
-        map_style: "https://www.staging.openhistoricalmap.org/map-styles/historical/historical.json",
-        vtiles_style: "https://vtiles.staging.openhistoricalmap.org/maps/osm/style.json",
+        map_style: "https://www.ohmstaging.org/map-styles/historical/historical.json",
+        vtiles_style: "https://vtiles.ohmstaging.org/maps/osm/style.json",
       };
 
       let beforeMap, afterMap, compareControl;
@@ -206,7 +206,7 @@
           };
           stagingLink.onclick = () => {
             const hash = getHash(afterMap);
-            window.open(`https://vtiles.staging.openhistoricalmap.org/${hash}`, "_blank");
+            window.open(`https://vtiles.ohmstaging.org/${hash}`, "_blank");
           };
         }
 
