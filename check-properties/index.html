@@ -150,11 +150,18 @@
         ? 'https://vtiles.openhistoricalmap.org/capabilities'
         : 'https://vtiles.ohmstaging.org/capabilities';
 
-      // Colors for each map source
-      const mapColors = [
+      // Colors for each individual layer (expanded palette)
+      const layerColors = [
         '#e6194b', '#3cb44b', '#4363d8', '#f58231', '#911eb4',
-        '#42d4f4', '#f032e6', '#bfef45', '#fabebe', '#469990'
+        '#42d4f4', '#f032e6', '#bfef45', '#fabebe', '#469990',
+        '#e6beff', '#9a6324', '#fffac8', '#800000', '#aaffc3',
+        '#808000', '#ffd8b1', '#000075', '#a9a9a9', '#ff4500',
+        '#00ced1', '#ff1493', '#7fff00', '#dc143c', '#00bfff',
+        '#ff6347', '#48d1cc', '#c71585', '#daa520', '#20b2aa',
+        '#ff69b4', '#1e90ff', '#b22222', '#32cd32', '#8b008b',
+        '#ff8c00', '#4682b4', '#d2691e', '#6a5acd', '#2e8b57'
       ];
+      let globalLayerColorIndex = 0;
 
       // Track added MapLibre layer IDs per source layer
       const addedLayerIds = {};
@@ -245,7 +252,7 @@
         });
       }
 
-      function addSourceAndLayers(map, mapInfo, color) {
+      function addSourceAndLayers(map, mapInfo) {
         const sourceName = mapInfo.name;
 
         // Add the main vector source for this map
@@ -259,6 +266,8 @@
         addedLayerIds[sourceName] = [];
 
         mapInfo.layers.forEach(layer => {
+          const color = layerColors[globalLayerColorIndex % layerColors.length];
+          globalLayerColorIndex++;
           const layerBase = `${sourceName}__${layer.name}`;
 
           // Add fill layer (polygons only)
@@ -318,7 +327,7 @@
           });
 
           addedLayerIds[sourceName].push(
-            { layerName: layer.name, ids: [fillId, lineId, circleId] }
+            { layerName: layer.name, color: color, ids: [fillId, lineId, circleId] }
           );
         });
       }
@@ -348,7 +357,6 @@
         sourcesList.innerHTML = "";
 
         capabilities.maps.forEach((mapInfo, idx) => {
-          const color = mapColors[idx % mapColors.length];
           const group = document.createElement("div");
           group.className = "map-group";
 
@@ -360,10 +368,6 @@
           groupCheckbox.type = "checkbox";
           groupCheckbox.id = `grp_${mapInfo.name}`;
 
-          const dot = document.createElement("span");
-          dot.className = "color-dot";
-          dot.style.background = color;
-
           const headerLabel = document.createElement("span");
           headerLabel.textContent = `${mapInfo.name} (${mapInfo.layers.length} capas)`;
 
@@ -372,7 +376,6 @@
           arrow.style.fontSize = "10px";
 
           header.appendChild(groupCheckbox);
-          header.appendChild(dot);
           header.appendChild(headerLabel);
           header.appendChild(arrow);
 
@@ -382,7 +385,13 @@
 
           const layerCheckboxes = [];
 
-          mapInfo.layers.forEach(layer => {
+          // Add the source and layers to the map first so colors are assigned
+          addSourceAndLayers(map, mapInfo);
+
+          // Now build checkboxes with per-layer colors
+          const layerEntries = addedLayerIds[mapInfo.name] || [];
+
+          mapInfo.layers.forEach((layer, layerIdx) => {
             const layerLabel = document.createElement("label");
             const cb = document.createElement("input");
             cb.type = "checkbox";
@@ -397,7 +406,14 @@
             });
             layerCheckboxes.push(cb);
 
+            // Per-layer color dot
+            const layerDot = document.createElement("span");
+            layerDot.className = "color-dot";
+            const entry = layerEntries[layerIdx];
+            layerDot.style.background = entry ? entry.color : '#888';
+
             layerLabel.appendChild(cb);
+            layerLabel.appendChild(layerDot);
             layerLabel.appendChild(document.createTextNode(` ${layer.name} (z${layer.minzoom}-${layer.maxzoom})`));
             layersDiv.appendChild(layerLabel);
           });
@@ -429,9 +445,6 @@
           group.appendChild(header);
           group.appendChild(layersDiv);
           sourcesList.appendChild(group);
-
-          // Add the source and layers to the map
-          addSourceAndLayers(map, mapInfo, color);
         });
       }
 
