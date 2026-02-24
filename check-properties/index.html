@@ -116,6 +116,9 @@
         padding: 2px 4px; word-break: break-word;
       }
       .feature-card tr:last-child td { border-bottom: none; }
+      .feature-card a { color: #1a73e8; text-decoration: none; }
+      .feature-card a:hover { text-decoration: underline; }
+      .feature-card h4 a { color: #1a73e8; }
       .highlight-start { background: #c6f6c6; font-weight: bold; }
       .highlight-end { background: #fff6b3; font-weight: bold; }
 
@@ -150,18 +153,56 @@
         ? 'https://vtiles.openhistoricalmap.org/capabilities'
         : 'https://vtiles.ohmstaging.org/capabilities';
 
-      // Colors for each individual layer (expanded palette)
-      const layerColors = [
+      // Fixed colors per source__layer (based on capabilities)
+      const fixedLayerColors = {
+        // ohm - land
+        'ohm__land_ohm_lines': '#2e8b57',
+        'ohm__land_ohm_centroids': '#3cb371',
+        'ohm__land_ohm_maritime': '#20b2aa',
+        // ohm - places
+        'ohm__place_areas': '#ff8c00',
+        'ohm__place_points_centroids': '#ffa500',
+        // ohm - water
+        'ohm__water_areas': '#4363d8',
+        'ohm__water_areas_centroids': '#1e90ff',
+        'ohm__water_lines': '#00bfff',
+        // ohm - transport
+        'ohm__transport_areas': '#e6194b',
+        'ohm__transport_lines': '#dc143c',
+        'ohm__route_lines': '#911eb4',
+        'ohm__transport_points_centroids': '#ff6347',
+        // ohm - amenity
+        'ohm__amenity_areas': '#f032e6',
+        'ohm__amenity_points_centroids': '#ff69b4',
+        // ohm - buildings
+        'ohm__buildings': '#9a6324',
+        'ohm__buildings_points_centroids': '#d2691e',
+        // ohm - landuse
+        'ohm__landuse_areas': '#bfef45',
+        'ohm__landuse_points_centroids': '#7fff00',
+        'ohm__landuse_lines': '#808000',
+        // ohm - other
+        'ohm__other_areas': '#a9a9a9',
+        'ohm__other_points_centroids': '#c0c0c0',
+        'ohm__other_lines': '#778899',
+        // ohm - communication
+        'ohm__communication': '#42d4f4',
+        // ohm_admin
+        'ohm_admin__boundaries': '#800000',
+        // ohm_non_admin
+        'ohm_non_admin__boundaries_areas': '#b22222',
+        'ohm_non_admin__boundaries_centroids': '#cd5c5c',
+        // ne
+        'ne__water_areas': '#000075',
+        // osm_land
+        'osm_land__land': '#aaffc3'
+      };
+      // Fallback palette for layers not in the fixed map
+      const fallbackColors = [
         '#e6194b', '#3cb44b', '#4363d8', '#f58231', '#911eb4',
-        '#42d4f4', '#f032e6', '#bfef45', '#fabebe', '#469990',
-        '#e6beff', '#9a6324', '#fffac8', '#800000', '#aaffc3',
-        '#808000', '#ffd8b1', '#000075', '#a9a9a9', '#ff4500',
-        '#00ced1', '#ff1493', '#7fff00', '#dc143c', '#00bfff',
-        '#ff6347', '#48d1cc', '#c71585', '#daa520', '#20b2aa',
-        '#ff69b4', '#1e90ff', '#b22222', '#32cd32', '#8b008b',
-        '#ff8c00', '#4682b4', '#d2691e', '#6a5acd', '#2e8b57'
+        '#42d4f4', '#f032e6', '#bfef45', '#fabebe', '#469990'
       ];
-      let globalLayerColorIndex = 0;
+      let fallbackColorIndex = 0;
 
       // Track added MapLibre layer IDs per source layer
       const addedLayerIds = {};
@@ -206,6 +247,34 @@
         window.history.replaceState({}, '', url);
       }
 
+      function getOsmType(feature) {
+        if (!feature.geometry) return 'way';
+        switch (feature.geometry.type) {
+          case 'Point':
+          case 'MultiPoint':
+            return 'node';
+          case 'LineString':
+          case 'MultiLineString':
+            return 'way';
+          default:
+            return 'way';
+        }
+      }
+
+      function formatPropertyValue(key, value, feature) {
+        if (value === null || value === undefined) return '';
+        const strVal = String(value);
+        const ohmBase = 'https://www.openhistoricalmap.org';
+        if (key === 'relation' && strVal) {
+          return `<a href="${ohmBase}/relation/${strVal}" target="_blank">${strVal}</a>`;
+        }
+        if ((key === '_id' || key === 'osm_id') && strVal) {
+          const osmType = getOsmType(feature);
+          return `<a href="${ohmBase}/${osmType}/${strVal}" target="_blank">${strVal}</a>`;
+        }
+        return strVal;
+      }
+
       function displayFeatures(features) {
         const tableDiv = document.getElementById("attribute-table");
 
@@ -233,9 +302,11 @@
           const card = document.createElement("div");
           card.className = "feature-card";
 
+          const ohmBase = 'https://www.openhistoricalmap.org';
           let html = `<h4>Segment ${idx + 1} : ${feature.sourceLayer || 'unknown'}`;
           if (feature.id !== undefined) {
-            html += ` | <small>Feature ID: ${feature.id}</small>`;
+            const osmType = getOsmType(feature);
+            html += ` | <small>Feature ID: <a href="${ohmBase}/${osmType}/${feature.id}" target="_blank">${feature.id}</a></small>`;
           }
           html += `</h4><table>`;
 
@@ -243,7 +314,8 @@
             let cls = "";
             if (key === "start_date") cls = "highlight-start";
             if (key === "end_date") cls = "highlight-end";
-            html += `<tr class="${cls}"><td><strong>${key}</strong></td><td>${value}</td></tr>`;
+            const displayValue = formatPropertyValue(key, value, feature);
+            html += `<tr class="${cls}"><td><strong>${key}</strong></td><td>${displayValue}</td></tr>`;
           }
 
           html += "</table>";
@@ -266,8 +338,8 @@
         addedLayerIds[sourceName] = [];
 
         mapInfo.layers.forEach(layer => {
-          const color = layerColors[globalLayerColorIndex % layerColors.length];
-          globalLayerColorIndex++;
+          const colorKey = `${sourceName}__${layer.name}`;
+          const color = fixedLayerColors[colorKey] || fallbackColors[fallbackColorIndex++ % fallbackColors.length];
           const layerBase = `${sourceName}__${layer.name}`;
 
           // Add fill layer (polygons only)
